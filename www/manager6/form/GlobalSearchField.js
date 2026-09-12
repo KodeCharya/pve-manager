@@ -2,7 +2,9 @@
  *  This is a global search field it loads the /cluster/resources on focus and displays the
  *  result in a floating grid. Filtering and sorting is done in the customFilter function
  *
- *  Accepts key up/down and enter for input, and it opens to CTRL+SHIFT+F and CTRL+SPACE
+ *  Accepts key up/down and enter for input, and it opens to CTRL+K, CTRL+SHIFT+F and CTRL+SPACE.
+ *  Prefix the query with '>' to run a guest action, e.g. '> stop 101' or '> console web01'.
+ *  Supported actions: start, shutdown, stop, reboot, console, snapshot.
  */
 Ext.define('PVE.form.GlobalSearchField', {
     extend: 'Ext.form.field.Text',
@@ -96,6 +98,21 @@ Ext.define('PVE.form.GlobalSearchField', {
         ],
     },
 
+    commandActions: ['start', 'shutdown', 'stop', 'reboot', 'console', 'snapshot'],
+
+    parseCommand: function (val) {
+        let raw = (val || '').toLowerCase().trim();
+        if (raw[0] !== '>') {
+            return { action: null, query: raw };
+        }
+        let rest = raw.slice(1).trim().split(/\s+/).filter(Boolean);
+        let first = rest[0] || '';
+        if (this.commandActions.indexOf(first) !== -1) {
+            return { action: first, query: rest.slice(1).join(' ') };
+        }
+        return { action: null, query: rest.join(' ') };
+    },
+
     customFilter: function (item) {
         let me = this;
 
@@ -142,7 +159,9 @@ Ext.define('PVE.form.GlobalSearchField', {
     updateFilter: function (field, newValue, oldValue) {
         let me = this;
         // parse input and filter store, show grid
-        me.grid.store.filterVal = newValue.toLowerCase().trim();
+        // '>' prefix runs a guest action, filter by the query part only
+        let cmd = me.parseCommand(newValue);
+        me.grid.store.filterVal = cmd.query;
         me.grid.store.clearFilter(true);
         me.grid.store.filterBy(me.customFilter);
         me.grid.getSelectionModel().select(0);
@@ -156,15 +175,118 @@ Ext.define('PVE.form.GlobalSearchField', {
         me.blur();
     },
 
+    runCommandAction: function (action, record) {
+        var me = this;
+        if (!record || !record.data) {
+            return;
+        }
+        let data = record.data;
+        if (data.type !== 'qemu' && data.type !== 'lxc') {
+            me.selectAndHide(record.data.id);
+            return;
+        }
+        let caps = Ext.state.Manager.get('GuiCap');
+        let vmid = data.vmid;
+        let node = data.node;
+        let name = data.name;
+        let type = data.type;
+        let running = data.status === 'running';
+
+        let guestCommand = function (cmd, params, task) {
+            Proxmox.Utils.API2Request({
+                params: params,
+                url: `/nodes/${node}/${type}/${vmid}/status/${cmd}`,
+                method: 'POST',
+                failure: (response) => Ext.Msg.alert(gettext('Error'), response.htmlStatus),
+            });
+        };
+        let confirmedGuestCommand = function (cmd, params, task) {
+            let msg = PVE.Utils.formatGuestTaskConfirmation(task, vmid, name);
+            Ext.Msg.confirm(gettext('Confirm'), msg, function (btn) {
+                if (btn === 'yes') {
+                    guestCommand(cmd, params, task);
+                }
+            });
+        };
+
+        // Power actions share one permission and one confirmation pattern;
+        // only 'start' runs without confirmation, like the guest CmdMenu.
+        const powerActions = ['start', 'shutdown', 'stop', 'reboot'];
+        if (powerActions.indexOf(action) !== -1) {
+            if (!caps.vms['VM.PowerMgmt']) {
+                Ext.Msg.alert(gettext('Error'), gettext('Permission denied'));
+                return;
+            }
+            if (action === 'start') {
+                guestCommand('start');
+            } else {
+                let prefix = type === 'qemu' ? 'qm' : 'vz';
+                confirmedGuestCommand(action, undefined, prefix + action);
+            }
+        } else if (action === 'console') {
+            if (!caps.vms['VM.Console']) {
+                Ext.Msg.alert(gettext('Error'), gettext('Permission denied'));
+                return;
+            }
+            if (type === 'qemu') {
+                Proxmox.Utils.API2Request({
+                    url: `/nodes/${node}/qemu/${vmid}/status/current`,
+                    failure: (response) => Ext.Msg.alert('Error', response.htmlStatus),
+                    success: function ({ result: { data: cur } }) {
+                        PVE.Utils.openDefaultConsoleWindow(
+                            { spice: cur.spice, xtermjs: cur.serial },
+                            'kvm',
+                            vmid,
+                            node,
+                            name,
+                        );
+                    },
+                });
+            } else {
+                PVE.Utils.openDefaultConsoleWindow(true, 'lxc', vmid, node, name);
+            }
+        } else if (action === 'snapshot') {
+            if (!caps.vms['VM.Snapshot']) {
+                Ext.Msg.alert(gettext('Error'), gettext('Permission denied'));
+                return;
+            }
+            Ext.create('PVE.window.Snapshot', {
+                nodename: node,
+                vmid: vmid,
+                vmname: name,
+                viewonly: false,
+                type: type,
+                isCreate: true,
+                submitText: gettext('Take Snapshot'),
+                autoShow: true,
+                running: running,
+            });
+        } else {
+            me.selectAndHide(record.data.id);
+            return;
+        }
+        me.grid.hide();
+        me.setValue('');
+        me.blur();
+    },
+
     onKey: function (field, e) {
         var me = this;
         var key = e.getKey();
 
         switch (key) {
             case Ext.event.Event.ENTER:
-                // go to first entry if there is one
+                // go to first entry if there is one, or run '> action' command
                 if (me.grid.store.getCount() > 0) {
-                    me.selectAndHide(me.grid.getSelection()[0].data.id);
+                    let rec = me.grid.getSelection()[0];
+                    // parse live value to avoid change-buffer race; an action
+                    // without a query never runs (avoids acting on row 1 by accident)
+                    let cmd = me.parseCommand(field.getValue());
+                    if (cmd.action && cmd.query) {
+                        me.runCommandAction(cmd.action, rec);
+                    } else {
+                        me.selectAndHide(rec.data.id);
+                    }
                 }
                 break;
             case Ext.event.Event.UP:
@@ -229,10 +351,16 @@ Ext.define('PVE.form.GlobalSearchField', {
 
         me.callParent();
 
-        // bind CTRL + SHIFT + F and CTRL + SPACE to open/close the search
+        // bind CTRL + K, CTRL + SHIFT + F and CTRL + SPACE to open/close the search
         me.keymap = new Ext.KeyMap({
             target: Ext.get(document),
             binding: [
+                {
+                    key: 'K',
+                    ctrl: true,
+                    fn: me.toggleFocus,
+                    scope: me,
+                },
                 {
                     key: 'F',
                     ctrl: true,

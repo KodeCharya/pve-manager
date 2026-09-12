@@ -111,6 +111,7 @@ JSSRC= 							\
 	panel/HealthWidget.js				\
 	panel/IPSet.js					\
 	panel/IPView.js					\
+	panel/GuestAgentInfo.js				\
 	panel/RunningChart.js				\
 	panel/StatusPanel.js				\
 	panel/GuestStatusView.js			\

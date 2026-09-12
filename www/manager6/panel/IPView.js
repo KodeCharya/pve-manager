@@ -88,6 +88,19 @@ Ext.define('PVE.panel.IPViewBase', {
                 },
                 {
                     xtype: 'button',
+                    itemId: 'copyBtn',
+                    hidden: true,
+                    ui: 'default-toolbar',
+                    iconCls: 'fa fa-clipboard',
+                    tooltip: gettext('Copy IP addresses'),
+                    handler: function (btn) {
+                        let view = this.up('pveIPViewBase');
+                        let ips = view.getCopyableIps ? view.getCopyableIps() : [];
+                        PVE.Utils.copyTextWithFeedback(ips.join('\n'), btn);
+                    },
+                },
+                {
+                    xtype: 'button',
                     itemId: 'moreBtn',
                     hidden: true,
                     ui: 'default-toolbar',
@@ -125,6 +138,40 @@ Ext.define('PVE.panel.IPViewBase', {
         });
 
         return ips;
+    },
+
+    getCopyableIps: function () {
+        let me = this;
+        let ips = [];
+        if (!Ext.isArray(me.nics)) {
+            return ips;
+        }
+        me.nics.forEach(function (nic) {
+            // same zero-MAC filter as the display, but copy all addresses
+            if (
+                !nic['hardware-address'] ||
+                nic['hardware-address'] === '00:00:00:00:00:00' ||
+                nic['hardware-address'] === '0:0:0:0:0:0'
+            ) {
+                return;
+            }
+            let nic_ips = nic['ip-addresses'] || [];
+            nic_ips.forEach(function (ip) {
+                let addr = ip['ip-address'];
+                if (addr) {
+                    ips.push(addr);
+                }
+            });
+        });
+        return ips;
+    },
+
+    setCopyVisible: function (visible) {
+        let me = this;
+        let btn = me.down('#copyBtn');
+        if (btn) {
+            btn.setVisible(!!visible && me.getCopyableIps().length > 0);
+        }
     },
 
     createUpdateStore: function (nodename, vmid) {
@@ -215,6 +262,7 @@ Ext.define('PVE.panel.IPViewQEMU', {
 
         me.down('#ipBox').update(text);
         me.down('#moreBtn').setVisible(more);
+        me.setCopyVisible(more);
     },
 
     startIPStore: function (store, records, success) {
@@ -280,6 +328,7 @@ Ext.define('PVE.panel.IPViewLXC', {
         }
         me.down('#ipBox').update(text);
         me.down('#moreBtn').setVisible(more);
+        me.setCopyVisible(more);
     },
 
     startIPStore: function (store, records, success) {

@@ -171,14 +171,44 @@ Ext.define('PVE.lxc.CmdMenu', {
             {
                 text: gettext('Console'),
                 iconCls: 'fa fa-fw fa-terminal',
-                handler: () =>
-                    PVE.Utils.openDefaultConsoleWindow(
-                        true,
-                        'lxc',
-                        info.vmid,
-                        info.node,
-                        info.vmname,
-                    ),
+                menu: [
+                    {
+                        text: gettext('Open'),
+                        iconCls: 'fa fa-fw fa-terminal',
+                        handler: () =>
+                            PVE.Utils.openDefaultConsoleWindow(
+                                true,
+                                'lxc',
+                                info.vmid,
+                                info.node,
+                                info.vmname,
+                            ),
+                    },
+                    {
+                        text: gettext('Open in New Tab'),
+                        iconCls: 'fa fa-fw fa-external-link',
+                        handler: () =>
+                            PVE.Utils.openDefaultConsoleInNewTab(
+                                true,
+                                'lxc',
+                                info.vmid,
+                                info.node,
+                                info.vmname,
+                            ),
+                    },
+                    {
+                        text: gettext('Open in New Window'),
+                        iconCls: 'fa fa-fw fa-window-restore',
+                        handler: () =>
+                            PVE.Utils.openDefaultConsoleWindow(
+                                true,
+                                'lxc',
+                                info.vmid,
+                                info.node,
+                                info.vmname,
+                            ),
+                    },
+                ],
             },
         ];
 

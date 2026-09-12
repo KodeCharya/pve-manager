@@ -164,7 +164,7 @@ Ext.define('PVE.data.ResourceStore', {
                 header: gettext('Disk usage') + ' %',
                 type: 'number',
                 sortable: true,
-                renderer: PVE.Utils.render_disk_usage_percent,
+                renderer: PVE.Utils.render_disk_usage_percent_with_warning,
                 width: 100,
                 calculate: PVE.Utils.calculate_disk_usage,
                 sortType: 'asFloat',
@@ -196,7 +196,7 @@ Ext.define('PVE.data.ResourceStore', {
             memuse: {
                 header: gettext('Memory usage') + ' %',
                 type: 'number',
-                renderer: PVE.Utils.render_mem_usage_percent,
+                renderer: PVE.Utils.render_mem_usage_percent_with_warning,
                 calculate: PVE.Utils.calculate_mem_usage,
                 sortType: 'asFloat',
                 sortable: true,
@@ -219,7 +219,7 @@ Ext.define('PVE.data.ResourceStore', {
             cpu: {
                 header: gettext('CPU usage'),
                 type: 'float',
-                renderer: Proxmox.Utils.render_cpu,
+                renderer: PVE.Utils.render_cpu_with_warning,
                 sortable: true,
                 width: 100,
             },

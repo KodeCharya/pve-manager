@@ -206,24 +206,77 @@ Ext.define('PVE.qemu.CmdMenu', {
             {
                 text: gettext('Console'),
                 iconCls: 'fa fa-fw fa-terminal',
-                handler: function () {
-                    Proxmox.Utils.API2Request({
-                        url: `/nodes/${info.node}/qemu/${info.vmid}/status/current`,
-                        failure: (response, opts) => Ext.Msg.alert('Error', response.htmlStatus),
-                        success: function ({ result: { data } }, opts) {
-                            PVE.Utils.openDefaultConsoleWindow(
-                                {
-                                    spice: data.spice,
-                                    xtermjs: data.serial,
+                menu: [
+                    {
+                        text: gettext('Open'),
+                        iconCls: 'fa fa-fw fa-terminal',
+                        handler: function () {
+                            Proxmox.Utils.API2Request({
+                                url: `/nodes/${info.node}/qemu/${info.vmid}/status/current`,
+                                failure: (response, opts) =>
+                                    Ext.Msg.alert('Error', response.htmlStatus),
+                                success: function ({ result: { data } }, opts) {
+                                    PVE.Utils.openDefaultConsoleWindow(
+                                        {
+                                            spice: data.spice,
+                                            xtermjs: data.serial,
+                                        },
+                                        'kvm',
+                                        info.vmid,
+                                        info.node,
+                                        info.name,
+                                    );
                                 },
-                                'kvm',
-                                info.vmid,
-                                info.node,
-                                info.name,
-                            );
+                            });
                         },
-                    });
-                },
+                    },
+                    {
+                        text: gettext('Open in New Tab'),
+                        iconCls: 'fa fa-fw fa-external-link',
+                        handler: function () {
+                            Proxmox.Utils.API2Request({
+                                url: `/nodes/${info.node}/qemu/${info.vmid}/status/current`,
+                                failure: (response, opts) =>
+                                    Ext.Msg.alert('Error', response.htmlStatus),
+                                success: function ({ result: { data } }, opts) {
+                                    PVE.Utils.openDefaultConsoleInNewTab(
+                                        {
+                                            spice: data.spice,
+                                            xtermjs: data.serial,
+                                        },
+                                        'kvm',
+                                        info.vmid,
+                                        info.node,
+                                        info.name,
+                                    );
+                                },
+                            });
+                        },
+                    },
+                    {
+                        text: gettext('Open in New Window'),
+                        iconCls: 'fa fa-fw fa-window-restore',
+                        handler: function () {
+                            Proxmox.Utils.API2Request({
+                                url: `/nodes/${info.node}/qemu/${info.vmid}/status/current`,
+                                failure: (response, opts) =>
+                                    Ext.Msg.alert('Error', response.htmlStatus),
+                                success: function ({ result: { data } }, opts) {
+                                    PVE.Utils.openDefaultConsoleWindow(
+                                        {
+                                            spice: data.spice,
+                                            xtermjs: data.serial,
+                                        },
+                                        'kvm',
+                                        info.vmid,
+                                        info.node,
+                                        info.name,
+                                    );
+                                },
+                            });
+                        },
+                    },
+                ],
             },
         ];
 

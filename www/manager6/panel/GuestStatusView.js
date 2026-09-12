@@ -169,6 +169,18 @@ Ext.define('PVE.panel.GuestStatusView', {
                 pveSelNode: '{pveSelNode}',
             },
         },
+        {
+            xtype: 'box',
+            height: 10,
+        },
+        {
+            cbind: {
+                xtype: (get) =>
+                    get('isQemu') ? 'pveGuestAgentInfoQEMU' : 'pveGuestAgentInfoLXC',
+                rstore: '{rstore}',
+                pveSelNode: '{pveSelNode}',
+            },
+        },
     ],
 
     updateTitle: function () {

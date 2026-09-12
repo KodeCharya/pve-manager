@@ -1290,6 +1290,88 @@ Ext.define('PVE.Utils', {
             return (value * 100).toFixed(1) + ' %';
         },
 
+        // Reuse existing Proxmox thresholds (memory 0.9/0.975, progress 0.8/0.9).
+        // Warnings use icon + text, never color alone, and only for steady
+        // values from existing RRD/cluster-resources data (no extra polling).
+        resourceWarningThresholds: {
+            cpu: 0.9,
+            mem: 0.9,
+            disk: 0.8,
+        },
+
+        render_resource_warning_icon: function (fraction, kind) {
+            // Only fractions (0..1) are meaningful here; raw byte counts
+            // passed to a percent renderer must never trigger a warning.
+            if (!Ext.isNumeric(fraction) || fraction < 0 || fraction > 1) {
+                return '';
+            }
+            let thresholds = PVE.Utils.resourceWarningThresholds;
+            let warnAt = thresholds[kind] ?? 0.9;
+            if (fraction < warnAt) {
+                return '';
+            }
+            let tip = Ext.String.htmlEncode(gettext('High usage'));
+            return ` <i class="fa fa-exclamation-triangle warning" title="${tip}" aria-label="${tip}"></i>`;
+        },
+
+        render_cpu_with_warning: function (value, metaData, record, rowIndex, colIndex, store) {
+            let text = Proxmox.Utils.render_cpu(value, metaData, record, rowIndex, colIndex, store);
+            if (!text || !Ext.isNumeric(value)) {
+                return text;
+            }
+            // cluster/resources cpu is a fraction 0..1 (1 = 100% of one core
+            // scaled by maxcpu in render_cpu); warn on high host load fraction.
+            // Only warn for guests/nodes with valid uptime to avoid transient noise.
+            if (record && record.data && Ext.isNumeric(record.data.uptime) && !record.data.uptime) {
+                return text;
+            }
+            return text + PVE.Utils.render_resource_warning_icon(value, 'cpu');
+        },
+
+        render_mem_usage_percent_with_warning: function (
+            value,
+            metaData,
+            record,
+            rowIndex,
+            colIndex,
+            store,
+        ) {
+            let text = PVE.Utils.render_mem_usage_percent(
+                value,
+                metaData,
+                record,
+                rowIndex,
+                colIndex,
+                store,
+            );
+            if (!text) {
+                return text;
+            }
+            return text + PVE.Utils.render_resource_warning_icon(value, 'mem');
+        },
+
+        render_disk_usage_percent_with_warning: function (
+            value,
+            metaData,
+            record,
+            rowIndex,
+            colIndex,
+            store,
+        ) {
+            let text = PVE.Utils.render_disk_usage_percent(
+                value,
+                metaData,
+                record,
+                rowIndex,
+                colIndex,
+                store,
+            );
+            if (!text) {
+                return text;
+            }
+            return text + PVE.Utils.render_resource_warning_icon(value, 'disk');
+        },
+
         render_disk_usage: function (value, metaData, record, rowIndex, colIndex, store) {
             var disk = value;
             var maxdisk = record.data.maxdisk;
@@ -1494,25 +1576,151 @@ Ext.define('PVE.Utils', {
             return dv;
         },
 
-        openVNCViewer: function (vmtype, vmid, nodename, vmname, cmd) {
+        getConsoleURL: function (viewer, consoleType, vmid, nodename, vmname, cmd) {
             let scaling = 'off';
             if (Proxmox.Utils.toolkit !== 'touch') {
                 let sp = Ext.state.Manager.getProvider();
                 scaling = sp.get('novnc-scaling', 'off');
             }
-            var url = Ext.Object.toQueryString({
-                console: vmtype, // kvm, lxc, upgrade or shell
-                novnc: 1,
+            let queryDict = {
+                console: consoleType, // kvm, lxc, upgrade, shell or cmd
                 vmid: vmid,
-                vmname: vmname,
                 node: nodename,
-                resize: scaling,
+                vmname: vmname,
                 cmd: cmd,
-            });
-            var nw = window.open('?' + url, '_blank', 'innerWidth=745,innerheight=427');
+                resize: scaling,
+            };
+            if (viewer === 'html5') {
+                queryDict.novnc = 1;
+            } else if (viewer === 'xtermjs') {
+                queryDict.xtermjs = 1;
+            } else {
+                throw `unsupported viewer for URL generation '${viewer}'`;
+            }
+            PVE.Utils.cleanEmptyObjectKeys(queryDict);
+            return '?' + Ext.Object.toQueryString(queryDict);
+        },
+
+        openVNCViewer: function (vmtype, vmid, nodename, vmname, cmd) {
+            var url = PVE.Utils.getConsoleURL('html5', vmtype, vmid, nodename, vmname, cmd);
+            var nw = window.open(url, '_blank', 'innerWidth=745,innerheight=427');
             if (nw) {
                 nw.focus();
             }
+        },
+
+        openConsoleInNewTab: function (viewer, consoleType, vmid, nodename, vmname, cmd) {
+            // SPICE cannot be opened in a browser tab, it downloads a .vv file.
+            // Preserve behavior by falling back to the regular opener.
+            if (viewer === 'vv') {
+                PVE.Utils.openConsoleWindow(viewer, consoleType, vmid, nodename, vmname, cmd);
+                return;
+            }
+            var url = PVE.Utils.getConsoleURL(
+                viewer,
+                consoleType,
+                vmid,
+                nodename,
+                vmname,
+                cmd,
+            );
+            // No window features -> browser opens a new tab (same-origin,
+            // session/cookie auth is preserved, no ticket in URL).
+            var nw = window.open(url, '_blank');
+            if (nw) {
+                nw.focus();
+            }
+        },
+
+        openDefaultConsoleInNewTab: function (
+            consoles,
+            consoleType,
+            vmid,
+            nodename,
+            vmname,
+            cmd,
+        ) {
+            var dv = PVE.Utils.defaultViewer(consoles, consoleType);
+            PVE.Utils.openConsoleInNewTab(dv, consoleType, vmid, nodename, vmname, cmd);
+        },
+
+        copyToClipboard: function (text) {
+            if (text === undefined || text === null) {
+                return Promise.resolve(false);
+            }
+            let value = String(text);
+            if (
+                navigator.clipboard &&
+                typeof navigator.clipboard.writeText === 'function' &&
+                window.isSecureContext !== false
+            ) {
+                return navigator.clipboard
+                    .writeText(value)
+                    .then(() => true)
+                    .catch(() => PVE.Utils.legacyCopyToClipboard(value));
+            }
+            return Promise.resolve(PVE.Utils.legacyCopyToClipboard(value));
+        },
+
+        legacyCopyToClipboard: function (value) {
+            try {
+                let el = document.createElement('textarea');
+                el.value = value;
+                el.setAttribute('readonly', '');
+                el.style.position = 'absolute';
+                el.style.left = '-9999px';
+                document.body.appendChild(el);
+                el.select();
+                el.setSelectionRange(0, el.value.length);
+                let ok = document.execCommand('copy');
+                document.body.removeChild(el);
+                return !!ok;
+            } catch (_e) {
+                return false;
+            }
+        },
+
+        showCopyFeedback: function (success, btn) {
+            if (success) {
+                if (Ext.toast) {
+                    Ext.toast(gettext('Copied to clipboard'));
+                } else if (btn && btn.setTooltip) {
+                    let old = btn.tooltip;
+                    btn.setTooltip(gettext('Copied!'));
+                    Ext.defer(function () {
+                        if (!btn.isDestroyed && !btn.isDestroying) {
+                            btn.setTooltip(old);
+                        }
+                    }, 1500);
+                }
+            } else {
+                Ext.Msg.alert(gettext('Error'), gettext('Copy to clipboard failed'));
+            }
+        },
+
+        copyTextWithFeedback: function (text, btn) {
+            PVE.Utils.copyToClipboard(text).then((ok) => PVE.Utils.showCopyFeedback(ok, btn));
+        },
+
+        formatGuestConnectionInfo: function (info) {
+            // Only include non-sensitive, actually available values.
+            let lines = [];
+            if (Ext.isNumeric(info.vmid)) {
+                lines.push(`VMID: ${info.vmid}`);
+            }
+            if (info.name) {
+                lines.push(`${gettext('Name')}: ${info.name}`);
+            }
+            if (info.hostname && info.hostname !== Proxmox.Utils.unknownText) {
+                lines.push(`${gettext('Hostname')}: ${info.hostname}`);
+            }
+            if (info.ip) {
+                lines.push(`IP: ${info.ip}`);
+            }
+            if (info.node) {
+                lines.push(`${gettext('Node')}: ${info.node}`);
+            }
+            return lines.join('\n');
         },
 
         openSpiceViewer: function (url, params) {

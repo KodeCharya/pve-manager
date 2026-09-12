@@ -50,8 +50,22 @@ Ext.define('PVE.button.ConsoleButton', {
     },
 
     openConsole: function (types) {
-        // used by split-menu buttons
+        // used by split-menu buttons, without types opens the default viewer
         let me = this;
+        if (!types) {
+            PVE.Utils.openDefaultConsoleWindow(
+                {
+                    spice: me.enableSpice,
+                    xtermjs: me.enableXtermjs,
+                },
+                me.consoleType,
+                me.vmid,
+                me.nodename,
+                me.consoleName,
+                me.cmd,
+            );
+            return;
+        }
         PVE.Utils.openConsoleWindow(
             types,
             me.consoleType,
@@ -60,6 +74,32 @@ Ext.define('PVE.button.ConsoleButton', {
             me.consoleName,
             me.cmd,
         );
+    },
+
+    openConsoleInTab: function (types) {
+        let me = this;
+        if (types) {
+            PVE.Utils.openConsoleInNewTab(
+                types,
+                me.consoleType,
+                me.vmid,
+                me.nodename,
+                me.consoleName,
+                me.cmd,
+            );
+        } else {
+            PVE.Utils.openDefaultConsoleInNewTab(
+                {
+                    spice: me.enableSpice,
+                    xtermjs: me.enableXtermjs,
+                },
+                me.consoleType,
+                me.vmid,
+                me.nodename,
+                me.consoleName,
+                me.cmd,
+            );
+        }
     },
 
     menu: [
@@ -94,6 +134,25 @@ Ext.define('PVE.button.ConsoleButton', {
                 view.openConsole(button.type);
             },
         },
+        { xtype: 'menuseparator' },
+        {
+            text: gettext('Open in New Tab'),
+            iconCls: 'fa fa-external-link',
+            tooltip: gettext('Open the default console in a new browser tab'),
+            handler: function () {
+                let view = this.up('button');
+                view.openConsoleInTab();
+            },
+        },
+        {
+            text: gettext('Open in New Window'),
+            iconCls: 'fa fa-window-restore',
+            tooltip: gettext('Open the default console in a new browser window'),
+            handler: function () {
+                let view = this.up('button');
+                view.openConsole();
+            },
+        },
     ],
 
     initComponent: function () {
@@ -104,5 +163,19 @@ Ext.define('PVE.button.ConsoleButton', {
         }
 
         me.callParent();
+
+        // Browser-standard new-tab interaction: middle-click the main button
+        // opens the default console in a new tab, left-click behavior unchanged.
+        me.on('afterrender', function () {
+            let el = me.getEl();
+            if (el && el.on) {
+                el.on('auxclick', function (e) {
+                    if (e.button === 1) {
+                        e.stopEvent();
+                        me.openConsoleInTab();
+                    }
+                });
+            }
+        });
     },
 });

@@ -119,6 +119,21 @@ Ext.define('PVE.dc.Tasks', {
                     renderer: Proxmox.Utils.render_upid,
                 },
                 {
+                    header: gettext('Duration'),
+                    dataIndex: 'endtime',
+                    width: 90,
+                    renderer: function (value, metaData, record) {
+                        if (record.data.pid || !value || !record.data.starttime) {
+                            return '';
+                        }
+                        let duration = value - record.data.starttime;
+                        if (!Ext.isNumeric(duration) || duration < 0) {
+                            return '';
+                        }
+                        return Proxmox.Utils.format_duration_long(duration);
+                    },
+                },
+                {
                     header: gettext('Status'),
                     dataIndex: 'status',
                     width: 200,

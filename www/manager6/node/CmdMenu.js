@@ -89,10 +89,62 @@ Ext.define('PVE.node.CmdMenu', {
             text: gettext('Shell'),
             itemId: 'shell',
             iconCls: 'fa fa-fw fa-terminal',
-            handler: function () {
-                let nodename = this.up('menu').nodename;
-                PVE.Utils.openDefaultConsoleWindow(true, 'shell', undefined, nodename, undefined);
-            },
+            menu: [
+                {
+                    text: gettext('Open'),
+                    iconCls: 'fa fa-fw fa-terminal',
+                    handler: function () {
+                        let menu = this.up('menu');
+                        while (menu && !menu.nodename) {
+                            menu = menu.up('menu');
+                        }
+                        let nodename = menu ? menu.nodename : undefined;
+                        PVE.Utils.openDefaultConsoleWindow(
+                            true,
+                            'shell',
+                            undefined,
+                            nodename,
+                            undefined,
+                        );
+                    },
+                },
+                {
+                    text: gettext('Open in New Tab'),
+                    iconCls: 'fa fa-fw fa-external-link',
+                    handler: function () {
+                        let menu = this.up('menu');
+                        while (menu && !menu.nodename) {
+                            menu = menu.up('menu');
+                        }
+                        let nodename = menu ? menu.nodename : undefined;
+                        PVE.Utils.openDefaultConsoleInNewTab(
+                            true,
+                            'shell',
+                            undefined,
+                            nodename,
+                            undefined,
+                        );
+                    },
+                },
+                {
+                    text: gettext('Open in New Window'),
+                    iconCls: 'fa fa-fw fa-window-restore',
+                    handler: function () {
+                        let menu = this.up('menu');
+                        while (menu && !menu.nodename) {
+                            menu = menu.up('menu');
+                        }
+                        let nodename = menu ? menu.nodename : undefined;
+                        PVE.Utils.openDefaultConsoleWindow(
+                            true,
+                            'shell',
+                            undefined,
+                            nodename,
+                            undefined,
+                        );
+                    },
+                },
+            ],
         },
         { xtype: 'menuseparator' },
         {
